@@ -1,5 +1,5 @@
 use crate::bitmap::BitMap;
-use crate::BYTE_SIZE;
+use crate::{div_ceil, BYTE_SIZE};
 use std::time::SystemTime;
 
 #[derive(Debug)]
@@ -13,7 +13,7 @@ pub(crate) struct Page {
 
 impl Page {
     pub fn new(index: usize, size: usize, data: Vec<u8>) -> Self {
-        let bitmap_size = (size + BYTE_SIZE - 1) / BYTE_SIZE;
+        let bitmap_size = div_ceil(size, BYTE_SIZE);
         let (bitmap, values) = data.split_at(bitmap_size);
         Page {
             index,

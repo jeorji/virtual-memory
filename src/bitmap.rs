@@ -1,5 +1,5 @@
 use crate::data_location::DataLocation;
-use crate::BYTE_SIZE;
+use crate::{div_ceil, BYTE_SIZE};
 
 #[derive(Debug)]
 pub struct BitMap(usize, DataLocation<u8>);
@@ -7,8 +7,7 @@ pub struct BitMap(usize, DataLocation<u8>);
 impl BitMap {
     #[allow(dead_code)]
     pub fn new(capacity: usize) -> Self {
-        //round up `capacity` to the nearest multiple of `BYTE_SIZE`
-        let bytes_amount = (capacity + BYTE_SIZE - 1) / BYTE_SIZE;
+        let bytes_amount = div_ceil(capacity, BYTE_SIZE);
         BitMap(capacity, DataLocation::<u8>::new(bytes_amount))
     }
 
@@ -55,7 +54,7 @@ impl BitMap {
 
 impl From<&[u8]> for BitMap {
     fn from(value: &[u8]) -> Self {
-        let bytes_amount = (value.len() + BYTE_SIZE - 1) / BYTE_SIZE;
+        let bytes_amount = div_ceil(value.len(), BYTE_SIZE);
         BitMap(bytes_amount * BYTE_SIZE, DataLocation::from(value))
     }
 }

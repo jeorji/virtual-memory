@@ -1,5 +1,5 @@
 use crate::page::Page;
-use crate::BYTE_SIZE;
+use crate::{div_ceil, BYTE_SIZE};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};
 
@@ -74,7 +74,7 @@ impl VirtualMemory {
     }
 
     fn page_byte_size(&self) -> usize {
-        let bitmap_size = (self.page_size + BYTE_SIZE - 1) / BYTE_SIZE;
+        let bitmap_size = div_ceil(self.page_size, BYTE_SIZE);
         self.page_size + bitmap_size
     }
 
