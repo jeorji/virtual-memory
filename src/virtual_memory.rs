@@ -40,21 +40,21 @@ impl VirtualMemory {
     }
 
     pub fn insert(&mut self, index: usize, element: u8) {
-        let page_index = index / self.page_size;
-        let value_offset = index % self.page_size;
+        let page_index = index / self.data_size();
+        let value_offset = index % self.data_size();
         self.page_mut(page_index).set_value(value_offset, element);
     }
 
     // mut because access_time of value mb changed
     pub fn get(&mut self, index: usize) -> Option<u8> {
-        let page_index = index / self.page_size;
-        let value_offset = index % self.page_size;
+        let page_index = index / self.data_size();
+        let value_offset = index % self.data_size();
         self.page_mut(page_index).get_value(value_offset)
     }
 
     pub fn remove(&mut self, index: usize) -> Option<u8> {
-        let page_index = index / self.page_size;
-        let value_offset = index % self.page_size;
+        let page_index = index / self.data_size();
+        let value_offset = index % self.data_size();
         let page = self.page_mut(page_index);
         let value = page.get_value(value_offset);
         page.remove_value(value_offset);
@@ -73,13 +73,14 @@ impl VirtualMemory {
             .expect("Failed to find page in buffer")
     }
 
-    fn page_byte_size(&self) -> usize {
-        let bitmap_size = div_ceil(self.page_size, BYTE_SIZE);
-        self.page_size + bitmap_size
+    fn data_size(&self) -> usize {
+        // The data section size is 8/9 of the byte page size
+        // 1/9 is bitmap
+        self.page_size * BYTE_SIZE / 9
     }
 
     fn page_offset(&self, page_index: usize) -> u64 {
-        (page_index * self.page_byte_size() + Self::SIGNATURE.len()) as u64
+        (page_index * self.page_size + Self::SIGNATURE.len()) as u64
     }
 
     fn is_buffer_full(&self) -> bool {
@@ -103,7 +104,7 @@ impl VirtualMemory {
         let offset = SeekFrom::Start(self.page_offset(page_index));
         self.swap_file.seek(offset).unwrap();
 
-        let mut bytes = vec![0u8; self.page_byte_size()];
+        let mut bytes = vec![0u8; self.page_size];
         self.swap_file
             .read(&mut bytes)
             .expect("Failed to read page");
@@ -171,21 +172,21 @@ mod test {
     }
 
     #[test]
-    fn page_byte_size() {
-        let vm = VirtualMemory::new("testfile_page_bsize".to_string(), 16, 3);
-        // page size = 16, bitmap size = 2
-        assert_eq!(vm.page_byte_size(), 2 + 16);
+    fn data_size() {
+        let vm = VirtualMemory::new("testfile_data_size".to_string(), 16, 3);
+        // page size = 16, bitmap size = 2, 16 - 2 = 14 data size
+        assert_eq!(vm.data_size(), 14);
 
-        std::fs::remove_file("testfile_page_bsize").unwrap();
+        std::fs::remove_file("testfile_data_size").unwrap();
     }
 
     #[test]
     fn page_offset() {
         let vm = VirtualMemory::new("testfile_poffset".to_string(), 16, 3);
-        // page size = 16, bitmap size = 2
+        // page size = bitmap size (2) + values size (14)
         assert_eq!(vm.page_offset(0), 2);
-        assert_eq!(vm.page_offset(1), 20);
-        assert_eq!(vm.page_offset(2), 38);
+        assert_eq!(vm.page_offset(1), 18);
+        assert_eq!(vm.page_offset(2), 34);
 
         std::fs::remove_file("testfile_poffset").unwrap();
     }

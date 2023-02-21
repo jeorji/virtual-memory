@@ -13,8 +13,10 @@ pub(crate) struct Page {
 
 impl Page {
     pub fn new(index: usize, size: usize, data: Vec<u8>) -> Self {
-        let bitmap_size = div_ceil(size, BYTE_SIZE);
+        let data_size = size * 8 / 9;
+        let bitmap_size = div_ceil(data_size, BYTE_SIZE);
         let (bitmap, values) = data.split_at(bitmap_size);
+
         Page {
             index,
             is_modified: false,
