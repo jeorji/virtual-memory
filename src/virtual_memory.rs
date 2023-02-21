@@ -15,7 +15,11 @@ impl VirtualMemory {
     pub fn new(file_name: String, page_size: usize, buffer_size: usize) -> Self {
         assert!(
             buffer_size > 2,
-            "Vritual memory should have buffer size >= 3"
+            "Vritual memory should have buffer size > 2"
+        );
+        assert!(
+            page_size > 2,
+            "Vritual memory should have page size > 2"
         );
 
         let mut swap_file = File::options()
