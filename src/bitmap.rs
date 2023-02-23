@@ -1,5 +1,5 @@
 use crate::data_location::DataLocation;
-use crate::{div_ceil, BYTE_SIZE};
+use crate::{div_ceil, BITS_IN_BYTE};
 
 #[derive(Debug)]
 pub struct BitMap(usize, DataLocation<u8>);
@@ -7,7 +7,7 @@ pub struct BitMap(usize, DataLocation<u8>);
 impl BitMap {
     #[allow(dead_code)]
     pub fn new(capacity: usize) -> Self {
-        let bytes_amount = div_ceil(capacity, BYTE_SIZE);
+        let bytes_amount = div_ceil(capacity, BITS_IN_BYTE);
         BitMap(capacity, DataLocation::<u8>::new(bytes_amount))
     }
 
@@ -19,8 +19,8 @@ impl BitMap {
             index
         );
 
-        let byte_index = index / BYTE_SIZE;
-        let bit_offset = index % BYTE_SIZE;
+        let byte_index = index / BITS_IN_BYTE;
+        let bit_offset = index % BITS_IN_BYTE;
 
         let state = self.1[byte_index] & (1 << bit_offset);
         state != 0
@@ -28,16 +28,16 @@ impl BitMap {
 
     // set bit to 1
     pub fn set(&mut self, index: usize) {
-        let byte_index = index / BYTE_SIZE;
-        let bit_offset = index % BYTE_SIZE;
+        let byte_index = index / BITS_IN_BYTE;
+        let bit_offset = index % BITS_IN_BYTE;
 
         self.1[byte_index] |= 1 << bit_offset;
     }
 
     // set bit to 0
-    pub fn unset(&mut self, index: usize) {
-        let byte_index = index / BYTE_SIZE;
-        let bit_offset = index % BYTE_SIZE;
+    pub fn reset(&mut self, index: usize) {
+        let byte_index = index / BITS_IN_BYTE;
+        let bit_offset = index % BITS_IN_BYTE;
 
         self.1[byte_index] &= !(1 << bit_offset);
     }
@@ -45,8 +45,8 @@ impl BitMap {
     // inverse the bit
     #[allow(dead_code)]
     pub fn inverse(&mut self, index: usize) {
-        let byte_index = index / BYTE_SIZE;
-        let bit_offset = index % BYTE_SIZE;
+        let byte_index = index / BITS_IN_BYTE;
+        let bit_offset = index % BITS_IN_BYTE;
 
         self.1[byte_index] ^= 1 << bit_offset;
     }
@@ -54,8 +54,8 @@ impl BitMap {
 
 impl From<&[u8]> for BitMap {
     fn from(value: &[u8]) -> Self {
-        let bytes_amount = div_ceil(value.len(), BYTE_SIZE);
-        BitMap(bytes_amount * BYTE_SIZE, DataLocation::from(value))
+        let bytes_amount = div_ceil(value.len(), BITS_IN_BYTE);
+        BitMap(bytes_amount * BITS_IN_BYTE, DataLocation::from(value))
     }
 }
 
@@ -73,8 +73,6 @@ mod test {
     #[should_panic]
     fn bitmap_out_of_bounds() {
         let bm = BitMap::new(64);
-        assert_eq!(bm.get(0), false);
-        assert_eq!(bm.get(63), false);
         bm.get(64);
     }
 
@@ -105,7 +103,7 @@ mod test {
     fn unset_bit() {
         let mut bm = BitMap::new(64);
         bm.set(8);
-        bm.unset(8);
+        bm.reset(8);
         assert_eq!(bm.get(8), false);
     }
 

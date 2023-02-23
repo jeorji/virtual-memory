@@ -1,14 +1,17 @@
 use std::mem;
 use std::ops::{Index, IndexMut};
 
-const MAX_STACK_SIZE: usize = 64;
+// 50 to keep the size of the
+// DateLocation<T> equal to 64 bytes
+// to hold this in one cache line
+const MAX_INLINE_SIZE: usize = 50;
 
 #[derive(Debug)]
 pub enum DataLocation<T>
 where
     T: Default + Copy,
 {
-    Stack(usize, [T; MAX_STACK_SIZE]),
+    Inline(usize, [T; MAX_INLINE_SIZE]),
     Heap(Vec<T>),
 }
 
@@ -19,10 +22,10 @@ where
     pub fn new(size: usize) -> Self {
         // amount of bytes needed to hold `size` elements of type `T`
         let in_bytes = size * mem::size_of::<T>();
-        if in_bytes > MAX_STACK_SIZE {
+        if in_bytes > MAX_INLINE_SIZE {
             Self::Heap(vec![T::default(); size])
         } else {
-            Self::Stack(size, [T::default(); MAX_STACK_SIZE])
+            Self::Inline(size, [T::default(); MAX_INLINE_SIZE])
         }
     }
 }
@@ -35,7 +38,7 @@ where
 
     fn index(&self, byte_index: usize) -> &Self::Output {
         match self {
-            Self::Stack(len, bytes) => {
+            Self::Inline(len, bytes) => {
                 assert!(
                     byte_index < *len,
                     "index out of bounds: the len is {} but the index is {}",
@@ -55,7 +58,7 @@ where
 {
     fn index_mut(&mut self, byte_index: usize) -> &mut Self::Output {
         match self {
-            Self::Stack(len, bytes) => {
+            Self::Inline(len, bytes) => {
                 assert!(
                     byte_index < *len,
                     "index out of bounds: the len is {} but the index is {}",
@@ -75,13 +78,13 @@ where
 {
     fn from(value: &[T]) -> Self {
         let in_bytes = value.len() * mem::size_of::<T>();
-        if in_bytes > MAX_STACK_SIZE {
+        if in_bytes > MAX_INLINE_SIZE {
             Self::Heap(Vec::from(value))
         } else {
-            let ptr = value.as_ptr() as *const [T; MAX_STACK_SIZE];
+            let ptr = value.as_ptr() as *const [T; MAX_INLINE_SIZE];
             // deref is safe because the size of the `value` is checked
             // and it will fit the stack-allocated array
-            Self::Stack(value.len(), unsafe { *ptr })
+            Self::Inline(value.len(), unsafe { *ptr })
         }
     }
 }
@@ -92,7 +95,7 @@ where
 {
     fn as_ref(&self) -> &[T] {
         match &self {
-            DataLocation::Stack(len, v) => &v[..*len],
+            DataLocation::Inline(len, v) => &v[..*len],
             DataLocation::Heap(v) => v,
         }
     }
@@ -101,7 +104,7 @@ where
 #[cfg(test)]
 mod test {
     use super::DataLocation;
-    use super::MAX_STACK_SIZE;
+    use super::MAX_INLINE_SIZE;
 
     #[test]
     fn index_operator() {
@@ -120,19 +123,19 @@ mod test {
 
     #[test]
     fn new_heap() {
-        let mr = DataLocation::<i32>::new(MAX_STACK_SIZE + 1);
+        let mr = DataLocation::<i32>::new(MAX_INLINE_SIZE + 1);
         match mr {
-            DataLocation::Heap(v) => assert_eq!(v.len(), MAX_STACK_SIZE + 1),
+            DataLocation::Heap(v) => assert_eq!(v.len(), MAX_INLINE_SIZE + 1),
             _ => panic!("Expected DataLocation::Heap"),
         }
     }
 
     #[test]
     fn new_stack() {
-        let mr = DataLocation::<u8>::new(MAX_STACK_SIZE - 1);
+        let mr = DataLocation::<u8>::new(MAX_INLINE_SIZE - 1);
         match mr {
-            DataLocation::Stack(len, _) => assert_eq!(len, MAX_STACK_SIZE - 1),
-            _ => panic!("Expected DataLocation::Stack"),
+            DataLocation::Inline(len, _) => assert_eq!(len, MAX_INLINE_SIZE - 1),
+            _ => panic!("Expected DataLocation::Inline"),
         }
     }
 
@@ -149,18 +152,18 @@ mod test {
     #[test]
     #[should_panic]
     fn heap_out_of_bounds() {
-        let mut mr = DataLocation::<i32>::new(MAX_STACK_SIZE + 1);
-        mr[MAX_STACK_SIZE] = 1;
-        mr[MAX_STACK_SIZE + 1] = 2;
+        let mut mr = DataLocation::<i32>::new(MAX_INLINE_SIZE + 1);
+        mr[MAX_INLINE_SIZE] = 1;
+        mr[MAX_INLINE_SIZE + 1] = 2;
         // this should panic
-        mr[MAX_STACK_SIZE + 2];
+        mr[MAX_INLINE_SIZE + 2];
     }
 
     #[test]
     fn from_slice_heap() {
-        let mr = DataLocation::from(vec![0; MAX_STACK_SIZE + 1].as_ref());
+        let mr = DataLocation::from(vec![0; MAX_INLINE_SIZE + 1].as_ref());
         match mr {
-            DataLocation::Heap(v) => assert_eq!(v, vec![0; MAX_STACK_SIZE + 1]),
+            DataLocation::Heap(v) => assert_eq!(v, vec![0; MAX_INLINE_SIZE + 1]),
             _ => panic!("Expected DataLocation::Heap"),
         }
     }
@@ -169,11 +172,11 @@ mod test {
     fn from_slice_stack() {
         let mr = DataLocation::from([1, 2, 3].as_ref());
         match mr {
-            DataLocation::Stack(len, v) => {
+            DataLocation::Inline(len, v) => {
                 assert_eq!(len, 3);
                 assert_eq!(&v[..len], [1, 2, 3].as_ref());
             }
-            _ => panic!("Expected DataLocation::Stack"),
+            _ => panic!("Expected DataLocation::Inline"),
         }
     }
 }

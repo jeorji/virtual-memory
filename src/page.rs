@@ -1,5 +1,5 @@
 use crate::bitmap::BitMap;
-use crate::{div_ceil, BYTE_SIZE};
+use crate::{div_ceil, BITS_IN_BYTE};
 use std::time::SystemTime;
 
 #[derive(Debug)]
@@ -13,8 +13,8 @@ pub(crate) struct Page {
 
 impl Page {
     pub fn new(index: usize, size: usize, data: Vec<u8>) -> Self {
-        let data_size = size * 8 / 9;
-        let bitmap_size = div_ceil(data_size, BYTE_SIZE);
+        let data_size = size * BITS_IN_BYTE / 9;
+        let bitmap_size = div_ceil(data_size, BITS_IN_BYTE);
         let (bitmap, values) = data.split_at(bitmap_size);
 
         Page {
@@ -34,19 +34,18 @@ impl Page {
     }
 
     pub fn get_value(&mut self, index: usize) -> Option<u8> {
-        match self.bitmap.get(index) {
-            true => {
-                self.last_access = SystemTime::now();
-                Some(self.values[index])
-            }
-            false => None,
+        if self.bitmap.get(index) {
+            self.last_access = SystemTime::now();
+            Some(self.values[index])
+        } else {
+            None
         }
     }
 
     pub fn remove_value(&mut self, index: usize) {
         self.is_modified = true;
         self.last_access = SystemTime::now();
-        self.bitmap.unset(index);
+        self.bitmap.reset(index);
         self.values.remove(index);
     }
 }
