@@ -8,6 +8,7 @@ pub struct VirtualMemory {
     swap_file: File,
     buffer: Vec<Page>,
     page_size: usize,
+    max_index: usize,
 }
 
 impl VirtualMemory {
@@ -37,10 +38,13 @@ impl VirtualMemory {
             swap_file,
             buffer,
             page_size,
+            max_index: 0,
         }
     }
 
     pub fn write(&mut self, index: usize, element: u8) {
+        self.max_index = self.max_index.max(index);
+
         let page_index = index / self.data_size();
         let value_offset = index % self.data_size();
         self.page_mut(page_index).set_value(value_offset, element);
@@ -48,6 +52,10 @@ impl VirtualMemory {
 
     // mut because access_time of value mb changed
     pub fn read(&mut self, index: usize) -> Option<u8> {
+        if index > self.max_index {
+            return None;
+        }
+
         let page_index = index / self.data_size();
         let value_offset = index % self.data_size();
         self.page_mut(page_index).get_value(value_offset)
