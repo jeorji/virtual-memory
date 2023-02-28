@@ -2,13 +2,14 @@ use crate::data_location::DataLocation;
 use crate::{div_ceil, BITS_IN_BYTE};
 
 #[derive(Debug)]
-pub struct BitMap(usize, DataLocation<u8>);
+// 455 to store BitMap of 4KB page inline
+pub struct BitMap(usize, DataLocation<u8, 455>);
 
 impl BitMap {
     #[allow(dead_code)]
     pub fn new(capacity: usize) -> Self {
         let bytes_amount = div_ceil(capacity, BITS_IN_BYTE);
-        BitMap(capacity, DataLocation::<u8>::new(bytes_amount))
+        BitMap(capacity, DataLocation::new(bytes_amount))
     }
 
     pub fn get(&self, index: usize) -> bool {
