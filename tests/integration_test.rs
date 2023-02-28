@@ -2,7 +2,9 @@ use vmem::VirtualMemory;
 
 #[test]
 fn swap_pages_in_buffer() {
-    let mut vm = VirtualMemory::new("testfile".to_string(), 9, 3);
+    let swap_file = tempfile::tempfile().unwrap();
+
+    let mut vm = VirtualMemory::new(swap_file, 9, 3);
     // page size (9) = bitmap size (1) + data size (8)
 
     // writing to 1 page
@@ -27,6 +29,4 @@ fn swap_pages_in_buffer() {
     assert_eq!(vm.read(0), Some(1));
     assert_eq!(vm.read(2), Some(2));
     assert_eq!(vm.read(4), Some(3));
-
-    std::fs::remove_file("testfile").unwrap();
 }

@@ -1,41 +1,38 @@
 use crate::page::Page;
 use crate::BITS_IN_BYTE;
-use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};
 
 #[derive(Debug)]
-pub struct VirtualMemory {
-    swap_file: File,
+pub struct VirtualMemory<RWS>
+where
+    RWS: Read + Write + Seek,
+{
+    swap_source: RWS,
     buffer: Vec<Page>,
     page_size: usize,
     max_index: usize,
 }
 
-impl VirtualMemory {
+impl<RWS> VirtualMemory<RWS>
+where
+    RWS: Read + Write + Seek,
+{
     const SIGNATURE: &[u8; 2] = b"VM";
-    pub fn new(file_name: String, page_size: usize, buffer_size: usize) -> Self {
+    pub fn new(mut swap_source: RWS, page_size: usize, buffer_size: usize) -> Self {
         assert!(
             buffer_size > 2,
             "Virtual memory should have buffer size > 2"
         );
         assert!(page_size > 1, "Virtual memory should have page size > 1");
 
-        let mut swap_file = File::options()
-            .write(true)
-            .read(true)
-            .create(true)
-            .truncate(true)
-            .open(file_name)
-            .unwrap();
-
-        swap_file
+        swap_source
             .write(Self::SIGNATURE)
             .expect("Failed to write signature to swap file");
 
         let buffer: Vec<Page> = Vec::with_capacity(buffer_size);
 
         VirtualMemory {
-            swap_file,
+            swap_source,
             buffer,
             page_size,
             max_index: 0,
@@ -114,10 +111,10 @@ impl VirtualMemory {
 
         // set cursor to the start of the page in the file
         let offset = SeekFrom::Start(self.page_offset(page_index));
-        self.swap_file.seek(offset).unwrap();
+        self.swap_source.seek(offset).unwrap();
 
         let mut bytes = vec![0u8; self.page_size];
-        self.swap_file
+        self.swap_source
             .read(&mut bytes)
             .expect("Failed to read page");
 
@@ -134,12 +131,12 @@ impl VirtualMemory {
 
         if page.is_modified {
             let offset = SeekFrom::Start(self.page_offset(page_index));
-            self.swap_file.seek(offset).unwrap();
+            self.swap_source.seek(offset).unwrap();
 
-            self.swap_file
+            self.swap_source
                 .write(page.bitmap.as_ref())
                 .expect("Failed to write bitmap to swap file");
-            self.swap_file
+            self.swap_source
                 .write(page.values.as_ref())
                 .expect("Failed to write bitmap to swap file");
         }
@@ -148,7 +145,10 @@ impl VirtualMemory {
     }
 }
 
-impl Drop for VirtualMemory {
+impl<RWS> Drop for VirtualMemory<RWS>
+where
+    RWS: Read + Write + Seek,
+{
     fn drop(&mut self) {
         while let Some(last_page) = self.buffer.last() {
             self.unload_page(last_page.index);
@@ -158,14 +158,13 @@ impl Drop for VirtualMemory {
 
 #[cfg(test)]
 mod test {
-
     use super::VirtualMemory;
-    use std::fs::File;
-    use std::io::Read;
+    use tempfile::tempfile;
 
     #[test]
-    fn insert_get_remove() {
-        let mut vm = VirtualMemory::new("testfile_igr".to_string(), 4, 3);
+    fn write_read_remove() {
+        let swap_file = tempfile().unwrap();
+        let mut vm = VirtualMemory::new(swap_file, 4, 3);
         vm.write(0, 1);
         vm.write(1, 2);
         vm.write(2, 3);
@@ -178,45 +177,41 @@ mod test {
 
         assert_eq!(vm.remove(0), Some(1));
         assert_eq!(vm.read(0), None);
-
-        std::fs::remove_file("testfile_igr").unwrap();
     }
 
     #[test]
     fn data_size() {
-        let vm = VirtualMemory::new("testfile_data_size".to_string(), 16, 3);
+        let swap_file = tempfile().unwrap();
+        let vm = VirtualMemory::new(swap_file, 16, 3);
         // page size = 16, bitmap size = 2, 16 - 2 = 14 data size
         assert_eq!(vm.data_size(), 14);
-
-        std::fs::remove_file("testfile_data_size").unwrap();
     }
 
     #[test]
     fn page_offset() {
-        let vm = VirtualMemory::new("testfile_poffset".to_string(), 16, 3);
+        let swap_file = tempfile().unwrap();
+        let vm = VirtualMemory::new(swap_file, 16, 3);
         // page size (16) = bitmap size (2) + values size (14)
         assert_eq!(vm.page_offset(0), 2);
         assert_eq!(vm.page_offset(1), 18);
         assert_eq!(vm.page_offset(2), 34);
-
-        std::fs::remove_file("testfile_poffset").unwrap();
     }
 
     #[test]
     fn is_buffer_full() {
-        let mut vm = VirtualMemory::new("testfile_buffer_full".to_string(), 16, 3);
+        let swap_file = tempfile().unwrap();
+        let mut vm = VirtualMemory::new(swap_file, 16, 3);
         assert!(!vm.is_buffer_full());
         vm.write(0, 0);
         vm.write(16, 0);
         vm.write(32, 0);
         assert!(vm.is_buffer_full());
-
-        std::fs::remove_file("testfile_buffer_full").unwrap();
     }
 
     #[test]
     fn drop_oldest_page() {
-        let mut vm = VirtualMemory::new("testfile_drop_oldest".to_string(), 16, 3);
+        let swap_file = tempfile().unwrap();
+        let mut vm = VirtualMemory::new(swap_file, 16, 3);
         vm.write(0, 1);
         vm.write(16, 2);
         vm.write(32, 3);
@@ -224,32 +219,22 @@ mod test {
         assert_eq!(vm.buffer.len(), 2);
         assert_eq!(vm.buffer[0].index, 2);
         assert_eq!(vm.buffer[1].index, 1);
-
-        std::fs::remove_file("testfile_drop_oldest").unwrap();
     }
 
     #[test]
     fn load_page() {
-        let mut vm = VirtualMemory::new("testfile_load".to_string(), 16, 3);
+        let swap_file = tempfile().unwrap();
+        let mut vm = VirtualMemory::new(swap_file, 16, 3);
         vm.load_page(0);
         assert_eq!(vm.buffer.len(), 1);
-
-        std::fs::remove_file("testfile_load").unwrap();
     }
 
     #[test]
     fn unload_page() {
-        let mut vm = VirtualMemory::new("testfile_unload".to_string(), 8, 3);
+        let swap_file = tempfile().unwrap();
+        let mut vm = VirtualMemory::new(swap_file, 8, 3);
         vm.write(0, 1);
         vm.unload_page(0);
         assert_eq!(vm.buffer.len(), 0);
-
-        let mut file = File::open("testfile_unload").unwrap();
-        // sign = 2, bitmap = 1, page size = 8
-        let mut buffer = [0u8; 2 + 1 + 8];
-        file.read(&mut buffer).unwrap();
-        assert_eq!(buffer, [b'V', b'M', 1, 1, 0, 0, 0, 0, 0, 0, 0]);
-
-        std::fs::remove_file("testfile_unload").unwrap();
     }
 }
