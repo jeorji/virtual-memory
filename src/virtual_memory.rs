@@ -99,8 +99,11 @@ impl VirtualMemory {
     }
 
     fn drop_oldest_page(&mut self) {
-        self.buffer.sort_by_key(|e| e.last_access);
-        self.unload_page(self.buffer[0].index);
+        self.buffer
+            .sort_by_key(|e| std::cmp::Reverse(e.last_access));
+        if let Some(last_page) = self.buffer.last() {
+            self.unload_page(last_page.index);
+        }
     }
 
     // load page from file to vec buffer
@@ -147,9 +150,8 @@ impl VirtualMemory {
 
 impl Drop for VirtualMemory {
     fn drop(&mut self) {
-        while !self.buffer.is_empty() {
-            let page = &self.buffer[0];
-            self.unload_page(page.index);
+        while let Some(last_page) = self.buffer.last() {
+            self.unload_page(last_page.index);
         }
     }
 }
@@ -220,8 +222,8 @@ mod test {
         vm.write(32, 3);
         vm.drop_oldest_page();
         assert_eq!(vm.buffer.len(), 2);
-        assert_eq!(vm.buffer[0].index, 1);
-        assert_eq!(vm.buffer[1].index, 2);
+        assert_eq!(vm.buffer[0].index, 2);
+        assert_eq!(vm.buffer[1].index, 1);
 
         std::fs::remove_file("testfile_drop_oldest").unwrap();
     }
