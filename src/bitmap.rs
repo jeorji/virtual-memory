@@ -14,9 +14,9 @@ impl BitMap {
 
     pub fn get(&self, index: usize) -> bool {
         assert!(
-            index < self.0,
+            index < self.0 * BITS_IN_BYTE,
             "index out of bounds: the len is {} but the index is {}",
-            self.0,
+            self.0 * BITS_IN_BYTE,
             index
         );
 
